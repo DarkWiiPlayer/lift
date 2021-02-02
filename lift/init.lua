@@ -1,3 +1,8 @@
+--- Allows coroutines to yield several layers through the stack.
+-- All functions of the `coroutine` module are available in `lift`,
+-- but some (listed below) work slightly differently.
+-- @module lift
+
 local lift = {}
 
 for _, method in pairs{"create", "isyieldable", "running", "status", "wrap"} do
@@ -18,24 +23,34 @@ local function intercept(co, success, target, ...)
 	end
 end
 
+--- Resumes a lift coroutine.
+-- This function must be used for other lift functions to work correctly.
 function lift.resume(co, ...)
 	return intercept(co, coroutine.resume(co, ...))
 end
 
+--- Yields up one level.
+-- This function must be used for lift.resume to work correctly.
 function lift.yield(...)
 	return coroutine.yield(nil, ...)
 end
 
-function lift.bypass(...)
-	if type(...) == "thread" or type(...) == "nil" then
-		error("First argument to bypass cannot be thread or nil")
-	end
-	return coroutine.yield(...)
-end
+--- Yields to the closest vanilla resume.
+-- This yield will never be caught by `lift.resume` and will always go all
+-- the way to the next `coroutine.resume`.
+-- The first argument can never be `nil` or a coroutine.
+function lift.bypass(...) if type(...) == "thread" or type(...) == "nil"
+	then error("First argument to bypass cannot be thread or nil") end
+	return coroutine.yield(...) end
 
+--- Yields up to a certain level.  This function yields through several
+--layers of `lift.resume` calls until it arrives at the target coroutine or
+--a vanilla `coroutine.resume` call.  If it reaches a `lift.resume` call in
+--the main thread, it will attempt to yield out of the main thread and
+--cause an error.
 function lift.yieldto(co, ...)
 	if co ~= nil and type(co) ~= "thread" then
-		error("Can only yield to thread or nil")
+	error("Can only yield to thread or nil")
 	end
 	return coroutine.yield(co, ...)
 end
